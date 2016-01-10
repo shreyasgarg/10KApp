@@ -1,0 +1,282 @@
+//Shreyas Garg
+import java.util.*;
+import java.io.*;  
+import java.net.*;
+import java.awt.*;
+import javax.swing.*;
+public class FullProgram
+{
+   public static void main(String[] args) throws Exception
+   {
+      Scanner input = new Scanner(System.in);
+      System.out.println("Please Enter the Ticker Symbol");
+      String ticker = input.nextLine(); 
+   	
+   	//Pulling up the all documents page and locating the document specified   
+      URL searchPage = new URL("http://www.sec.gov/cgi-bin/browse-edgar?CIK=" + ticker.trim() + "&Find=Search&owner=exclude&action=getcompany");
+      URLConnection searchPageConnection = searchPage.openConnection();
+      searchPageConnection.connect();
+      BufferedReader searchIn = new BufferedReader(new InputStreamReader(searchPageConnection.getInputStream()));
+      String companyName = "";
+      while(true)
+      {
+         String temp = searchIn.readLine();
+         if(temp == null)
+         {
+            System.out.println("That is not a valid symbol");
+            System.exit(0);
+         }
+         if(temp.contains("companyName"))
+         {
+            companyName = temp;
+            break;
+         }
+      		
+      }
+      int index1 = companyName.indexOf("companyName") + 13;
+      int index2 = companyName.indexOf("<acronym");
+      companyName = companyName.substring(index1,index2);
+      System.out.println();
+      System.out.println(companyName);
+      System.out.println();
+      System.out.println("What report would you like?");
+      System.out.println("Enter the number corresponding to the report you would like");
+      System.out.println("1. 10-K");
+      System.out.println("2. 10-Q");
+      int reportNumber = 1;
+      try
+      {
+         reportNumber = Integer.parseInt(input.nextLine());
+      
+      }
+      catch(Exception e)
+      {
+         System.out.println("Sorry that is not a valid number.");
+         System.exit(0);
+      }   
+      input.close();
+      String find = "";
+      String lineAboveURL = "";
+      if(reportNumber == 1)
+         find = "10-K";
+      else
+         find = "10-Q";
+      while(true)
+      {
+         String temp = searchIn.readLine();
+         try
+         {
+            if(temp.contains(find) && !temp.contains(find +"/A"))
+            {
+               lineAboveURL = temp;
+               break;
+            }
+         }
+         catch(NullPointerException e)
+         {
+            System.out.println("Program is being updated to find 10-K's that haven't been filed recently.");
+            System.exit(0);
+         }
+      }
+      String URL = searchIn.readLine();
+      index1 = URL.indexOf("href")+6;
+      URL = URL.substring(index1);
+      index2 = URL.indexOf("\"");
+      URL = URL.substring(0,index2);
+      searchIn.close();
+   	
+   	//Accessing second page
+      URL second = new URL("http://www.sec.gov" +URL);
+      URLConnection secondConnection = second.openConnection();
+      secondConnection.connect();
+      BufferedReader secondIn = new BufferedReader(new InputStreamReader(secondConnection.getInputStream()));
+      lineAboveURL = "";		
+      //find = "XBRL INSTANCE DOCUMENT";
+      while(true)
+      {
+         String temp = secondIn.readLine();
+         if(temp == null)
+            break;
+         if(temp.contains(find + "</td>"))
+         {
+            lineAboveURL = temp;
+            break;
+         }
+      }
+      if(lineAboveURL.equals(""))
+         while(true)
+         {
+            String temp = secondIn.readLine();
+            if(temp == null)
+               break;
+            if(temp.contains(find))
+            {
+               lineAboveURL = temp;
+               break;
+            }
+         }
+      if(lineAboveURL.equals("")){
+         System.out.println("Sorry it seems that " + companyName + "does not have a 10K filed. It might have some variation filed but this program cannot detect it.");
+         System.exit(0);}
+      URL = secondIn.readLine();
+      index1 = URL.indexOf("href")+6;
+      URL = URL.substring(index1);
+      index2 = URL.indexOf("\"");
+      URL = URL.substring(0,index2);
+      secondIn.close();
+   	//Processing and extracting all Tables
+      URL doc = new URL("http://www.sec.gov" + URL);
+      URLConnection docConnect = doc.openConnection();
+      docConnect.connect();
+      BufferedReader sc = new BufferedReader(new InputStreamReader(docConnect.getInputStream()));
+   	
+   	//Making the html of all the tables
+      boolean store = false;
+      boolean add = true;
+      boolean oneLine = false;
+      ArrayList<String> titles = new ArrayList<String>();
+      ArrayList<String> descri = new ArrayList<String>();
+      ArrayList<String> tables = new ArrayList<String>();
+      Storage temp = new Storage(new ArrayList<String>());
+      Replacer prev = new Replacer();
+      while(true)
+      {
+         String st = sc.readLine();
+         //if(st.equals("<TABLE CELLSPACING=\"0\" CELLPADDING=\"0\" WIDTH=\"100%\" BORDER=\"0\" STYLE=\"BORDER-COLLAPSE:COLLAPSE\" ALIGN=\"center\">"))
+           // System.out.println(st);        
+         prev.add(st);
+         if(st.toUpperCase().contains("</DOCUMENT"))
+            break;      
+         if(st.equals(" "))
+            continue;
+         if(st.toUpperCase().contains("<TABLE") && st.toUpperCase().contains("</TABLE>") && st.length() > 1000)
+            oneLine = true;
+         if(oneLine)
+         {
+            ArrayList<String> poss = new ArrayList<String>();
+            String tem = st.toString();
+            while(tem.toUpperCase().contains("<TABLE"))
+            {
+            	//Figure out a way to get the titles. First look at the next comment because
+            	//it is easier to do it there.
+               index1 = tem.toUpperCase().indexOf("<TABLE");
+               index2 = tem.toUpperCase().indexOf("</TABLE>");
+               String te = tem.substring(index1,index2 + 8);
+               if(te.toUpperCase().contains("COLOR:"))
+                  temp.add(te);
+               tem = tem.substring(index2 + 3);
+            }	
+            oneLine = false;
+            for(String r: temp.list)
+               tables.add(r);
+         }
+         if(st.contains("<TABLE"))
+         {         
+            store = true;
+            if(temp.arr == null)
+            {
+               temp.arr = new String[prev.array.length];
+               for(int x = 0; x < temp.arr.length; x++)
+                  temp.arr[x] = prev.array[x];						
+            }
+            temp.add(st);
+         }
+         if(store)
+            temp.add(st);
+         if(st.contains("</TABLE>"))
+         {
+            for(String t: temp.list)
+               if(t.contains("BGCOLOR"))
+                  add = false;
+            if(!add)
+            {
+               String title = "";
+               for(int x = temp.arr.length-1; x >= 0; x--)
+                  title += temp.arr[x];
+               if(titles.contains("<TABLE"))
+                  title = title.substring(0,title.indexOf("<TABLE"));
+               String actualTitle = "";
+               while(title.contains("<P STYLE") && title.contains("</P>"))
+               {
+                  title = title.substring(title.indexOf("<P STYLE"));
+                  actualTitle += title.substring(title.indexOf("<P STYLE"),title.indexOf("</P")+4);   
+                  title = title.substring(title.indexOf("</P")+4);
+               }
+               String tempTitle = actualTitle.toString();
+               if(actualTitle.contains("</B"))
+               {
+                  String cut = "";
+                  while(actualTitle.contains("</B>"))
+                  {
+                     cut = actualTitle.substring(actualTitle.indexOf("<P STYLE"),actualTitle.indexOf("</P") + 4);
+                     actualTitle = actualTitle.substring(actualTitle.indexOf("</P") + 4);
+                     if(cut.contains("</B>"))
+                        break;              
+                  }
+                  actualTitle = cut;
+               }
+               String toAdd = "";
+               for(String r: temp.list)
+                  toAdd += r;
+               titles.add(actualTitle);
+               descri.add(tempTitle);         
+               tables.add(toAdd);
+            }
+            store = false;
+            add = true;
+            temp = new Storage(new ArrayList<String>());
+         }
+      }
+   	//Look at summer compsci gui's and create a gui where the user can
+   	//select each table that they want to save
+   	//Apparently html runs in java so no problem there
+   	//Maybe allow user to choose the name of the file (rename the table)
+   
+      PrintWriter out = new PrintWriter(new File(ticker+find+".txt"));
+      for(int x = 0; x < tables.size(); x++)
+      {
+         if(titles.size() != 0)
+            out.println(titles.get(x));
+         out.println(tables.get(x));
+      }
+      out.close();
+      System.out.println("The File was saved as: " + ticker + find + ".html");
+   	//Desktop.getDesktop().open(new File(ticker + find + ".xls"));
+      System.exit(0);
+   }
+}
+class Replacer
+{
+   public String[] array = new String[10];
+   public int place = 0;
+   public void add(String s)
+   {
+      if(place < array.length)
+      {
+         array[array.length - 1 -place] = s;
+         place++;
+      }  
+      else
+      {
+         String[] arr = new String[array.length];
+         arr[0] = s;
+         for(int x = 0; x < arr.length -1; x++)
+            arr[x+1] = array[x];
+         array = arr;
+         place = 0;
+      }
+   }
+}
+class Storage 
+{
+   public ArrayList<String> list;
+   public String[] arr = null;
+   public Storage(ArrayList<String> input)
+   {
+      list = input;
+   }
+   public void add(String s)
+   {
+      list.add(s);
+   }
+}
